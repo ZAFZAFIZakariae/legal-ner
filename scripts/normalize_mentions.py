@@ -1,51 +1,49 @@
-import psycopg2
+# scripts/normalize_mentions.py
+import argparse
 from rapidfuzz import process
+from src.db import get_connection
 
-# Connect
-conn = psycopg2.connect(dbname="legal", user="you", password="pw", host="localhost")
-cur  = conn.cursor()
+parser = argparse.ArgumentParser()
+parser.add_argument('--threshold', type=int, default=80)
+args = parser.parse_args()
 
-# Fetch mention records needing normalization
-cur.execute("""
-  SELECT mention_id, mention_text, is_article, entity_type
-  FROM mentions
-  WHERE resolved_law IS NULL  -- or however you mark unnormalized
-""")
-rows = cur.fetchall()
+conn = get_connection()
+cur = conn.cursor()
 
-# Fetch canonical lists into memory
-cur.execute("SELECT law_id, raw_text from laws")
-laws = cur.fetchall()             # list of (law_id, raw_text)
-law_texts = [r[1] for r in laws]
+# load canon
+cur.execute('SELECT law_id, raw_text FROM laws')
+laws = cur.fetchall()
+law_texts = [r['raw_text'] for r in laws]
 
-cur.execute("SELECT article_id, law_id, raw_text from articles")
-arts = cur.fetchall()             # list of (article_id, law_id, raw_text)
+cur.execute('SELECT article_id, law_id, raw_text FROM articles')
+arts = cur.fetchall()
 arts_by_law = {}
-for aid, lid, txt in arts:
-    arts_by_law.setdefault(lid, []).append((aid, txt))
+for r in arts:
+    arts_by_law.setdefault(r['law_id'], []).append((r['article_id'], r['raw_text']))
 
-for mention_id, text, is_article, etype in rows:
-    # 1) normalize law
-    best_law, score = process.extractOne(text, law_texts)
-    law_id = None
-    if score > 80:
-        law_id = laws[law_texts.index(best_law)][0]
+# normalize
+cur.execute('SELECT mention_id, mention_text, is_article, entity_type, resolved_law FROM mentions')
+rows = cur.fetchall()
+for r in rows:
+    mid, text, is_art, ent, parent_law = r
+    law_id = parent_law
+    score = 0
+    # normalize law first
+    best, score, idx = process.extractOne(text, law_texts)
+    law_id = laws[idx]['law_id'] if score>=args.threshold else None
 
-    article_id = None
-    if is_article and law_id:
-        # only match within that law’s articles
-        candidates = [a for a, txt in arts_by_law[law_id]]
-        texts      = [txt for a, txt in arts_by_law[law_id]]
-        best_art, art_score = process.extractOne(text, texts)
-        if art_score > 80:
-            article_id = candidates[texts.index(best_art)]
+    art_id = None
+    if is_art and law_id:
+        arts = arts_by_law.get(law_id, [])
+        texts = [a[1] for a in arts]
+        best2, score2, idx2 = process.extractOne(text, texts)
+        if score2>=args.threshold:
+            art_id = arts[idx2][0]
 
-    # Update the mention row
-    cur.execute("""
-        UPDATE mentions
-        SET resolved_law=%s, resolved_article=%s, match_score=%s
-        WHERE mention_id=%s
-    """, (law_id, article_id, score, mention_id))
+    cur.execute(
+        'UPDATE mentions SET resolved_law=?, resolved_article=?, match_score=? WHERE mention_id=?',
+        (law_id, art_id, score, mid)
+    )
 
 conn.commit()
 cur.close()
