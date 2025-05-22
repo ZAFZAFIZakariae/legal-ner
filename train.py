@@ -93,8 +93,7 @@ def train_flat(args):
         report = classification_report(
             y_true,
             y_pred,
-            labels=label_list[1:],  # skip “O” if you prefer
-            zero_division=0
+            target_names=label_list[1:]  # skip “O” if you prefer
         )
         logger.info(f"[Flat] Dev metrics:\n{report}")
 
