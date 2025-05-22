@@ -3,8 +3,9 @@ import argparse
 import logging
 import torch
 from transformers import AutoTokenizer
+from src.data_loader import conll_to_segments, text2segments
 from src.model import LawTagger
-from src.data_loader import conll_to_segments
+from src.normalizer import normalize_mention
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -12,8 +13,8 @@ logger = logging.getLogger(__name__)
 def infer_flat(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # 1) Prepare label list
-    entities   = ["LAW","CASE","COURT","JUDGE","LAWYER","COURT_CLERK","ATTORNEY_GENERAL"]
+    # 1) Build label list
+    entities = ["LAW","CASE","COURT","JUDGE","LAWYER","COURT_CLERK","ATTORNEY_GENERAL"]
     label_list = ["O"] + [f"{p}-{e}" for e in entities for p in ("B","I")]
 
     # 2) Load model
@@ -28,16 +29,17 @@ def infer_flat(args):
     # 3) Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.bert_model)
 
-    # 4) Read input segments
-    segments = conll_to_segments(args.data_file)
+    # 4) Prepare segments
+    if args.text:
+        segments, _ = text2segments(args.text)
+    else:
+        segments = conll_to_segments(args.data_file)
     os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
 
-    # 5) Open output file
+    # 5) Perform inference and normalization
     with open(args.output_path, 'w', encoding='utf-8') as out_f:
-        # Iterate segments
         for seg in segments:
             words = [tok.text for tok in seg]
-            # Tokenize into subwords
             encoding = tokenizer(
                 words,
                 is_split_into_words=True,
@@ -50,32 +52,48 @@ def infer_flat(args):
             attention_mask = encoding.attention_mask.to(device)
             word_ids = encoding.word_ids(batch_index=0)
 
-            # Predict
             with torch.no_grad():
                 logits = model(input_ids, attention_mask)
             preds = logits.argmax(dim=-1).cpu().tolist()[0]
 
-            # Map subword preds to word-level
-            pred_labels = []
-            prev_word_idx = None
-            for idx, word_idx in enumerate(word_ids):
-                if word_idx is None or word_idx == prev_word_idx:
+            # Map subword preds to word-level preds
+            word_preds = {}
+            prev_w = None
+            for idx, widx in enumerate(word_ids):
+                if widx is None or widx == prev_w:
                     continue
-                label_id = preds[idx]
-                pred_labels.append(label_list[label_id])
-                prev_word_idx = word_idx
+                word_preds[widx] = preds[idx]
+                prev_w = widx
+            pred_labels = [label_list[word_preds[i]] for i in range(len(words))]
 
-            # Write tokens and predictions
-            for tok, lab in zip(seg, pred_labels):
-                out_f.write(f"{tok.text} {lab}\n")
+            # Write tokens and predicted labels
+            for tok, lab in zip(words, pred_labels):
+                out_f.write(f"{tok} {lab}\n")
             out_f.write("\n")
+
+            # Normalize LAW mentions
+            i = 0
+            while i < len(pred_labels):
+                if pred_labels[i] == "B-LAW":
+                    span = [words[i]]
+                    j = i + 1
+                    while j < len(pred_labels) and pred_labels[j] == "I-LAW":
+                        span.append(words[j])
+                        j += 1
+                    mention = " ".join(span)
+                    law_id, normalized = normalize_mention(mention)
+                    logger.info(f"Mention '{mention}' normalized to (id={law_id}, name={normalized})")
+                    i = j
+                else:
+                    i += 1
 
     logger.info(f"Wrote predictions to {args.output_path}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_path',  required=True)
-    parser.add_argument('--data_file',   required=True)
+    parser.add_argument('--data_file',   required=False)
+    parser.add_argument('--text',        type=str, help="Raw Arabic text to tag")
     parser.add_argument('--output_path', required=True)
     parser.add_argument('--bert_model',  default='aubmindlab/bert-base-arabertv2')
     parser.add_argument('--dropout',     type=float, default=0.1)
