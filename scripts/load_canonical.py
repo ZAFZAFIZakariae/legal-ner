@@ -1,31 +1,30 @@
+# scripts/load_canonical.py
 import json
-import psycopg2
+from src.db import get_connection
 
-# Adjust connection params as needed
-conn = psycopg2.connect(dbname="legal", user="you", password="pw", host="localhost")
-cur  = conn.cursor()
+conn = get_connection()
+cur = conn.cursor()
 
-# Load and insert laws
-with open("data/laws_canonical.json", encoding="utf-8") as f:
-    laws = json.load(f)
-for entry in laws:
-    cur.execute(
-        "INSERT INTO laws (raw_text, normalized) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-        (entry["text"], entry["normalized"])
-    )
+# Load laws
+with open('data/laws_canonical.json', encoding='utf-8') as f:
+    for entry in json.load(f):
+        cur.execute(
+            'INSERT OR IGNORE INTO laws(raw_text, normalized) VALUES(?, ?)',
+            (entry['text'], entry['normalized'])
+        )
 
-# Load and insert articles
-with open("data/articles_canonical.json", encoding="utf-8") as f:
-    arts = json.load(f)
-for entry in arts:
-    # first find law_id
-    cur.execute("SELECT law_id FROM laws WHERE raw_text=%s", (entry["text"].split()[2],))
-    # (assumes entry["law_text"] is exact law.raw_text)
-    law_id = cur.fetchone()[0]
-    cur.execute(
-        "INSERT INTO articles (law_id, raw_text, normalized) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
-        (law_id, entry["text"], entry["normalized"])
-    )
+# Load articles
+with open('data/articles_canonical.json', encoding='utf-8') as f:
+    for entry in json.load(f):
+        # find law_id by raw_text
+        cur.execute('SELECT law_id FROM laws WHERE raw_text=?', (entry['law_text'],))
+        row = cur.fetchone()
+        if row:
+            law_id = row['law_id']
+            cur.execute(
+                'INSERT OR IGNORE INTO articles(law_id, raw_text, normalized) VALUES(?, ?, ?)',
+                (law_id, entry['text'], entry['normalized'])
+            )
 
 conn.commit()
 cur.close()
