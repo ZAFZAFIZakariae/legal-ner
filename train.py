@@ -85,10 +85,15 @@ def train_flat(args):
 
                 # convert to lists and filter out pad (-1)
                 for gold_seq, pred_seq in zip(labels.cpu().tolist(), preds.cpu().tolist()):
-                    true_labels = [label_list[id] for id in gold_seq if id != -1]
-                    pred_labels = [label_list[id] for id in pred_seq if id != -1]
+                    true_labels = []
+                    pred_labels = []
+                    for idg, idp in zip(gold_seq, pred_seq):
+                        if idg != -1:
+                            true_labels.append(label_list[idg])
+                            pred_labels.append(label_list[idp])
                     y_true.append(true_labels)
                     y_pred.append(pred_labels)
+
 
         report = classification_report(y_true, y_pred)
         logger.info(f"[Flat] Dev metrics:\n{report}")
