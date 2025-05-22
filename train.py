@@ -101,5 +101,6 @@ if __name__ == "__main__":
     parser.add_argument("--lr",          type=float, default=5e-5)
     parser.add_argument("--dropout",     type=float, default=0.1)
     parser.add_argument("--bert_model",  default="aubmindlab/bert-base-arabertv2")
+    parser.add_argument("--evaluate_dev", action="store_true", help="If set, run evaluation on dev set at the end of each epoch")
     args = parser.parse_args()
     train_flat(args)
