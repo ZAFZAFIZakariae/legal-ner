@@ -90,11 +90,7 @@ def train_flat(args):
                     y_true.append(true_labels)
                     y_pred.append(pred_labels)
 
-        report = classification_report(
-            y_true,
-            y_pred,
-            target_names=label_list[1:]  # skip “O” if you prefer
-        )
+        report = classification_report(y_true, y_pred)
         logger.info(f"[Flat] Dev metrics:\n{report}")
 
         # 6) Save checkpoint
