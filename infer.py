@@ -5,7 +5,6 @@ import torch
 from transformers import AutoTokenizer
 from src.data_loader import conll_to_segments, text2segments
 from src.model import LawTagger
-from src.normalizer import normalize_mention
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -71,21 +70,6 @@ def infer_flat(args):
                 out_f.write(f"{tok} {lab}\n")
             out_f.write("\n")
 
-            # Normalize LAW mentions
-            i = 0
-            while i < len(pred_labels):
-                if pred_labels[i] == "B-LAW":
-                    span = [words[i]]
-                    j = i + 1
-                    while j < len(pred_labels) and pred_labels[j] == "I-LAW":
-                        span.append(words[j])
-                        j += 1
-                    mention = " ".join(span)
-                    law_id, normalized = normalize_mention(mention)
-                    logger.info(f"Mention '{mention}' normalized to (id={law_id}, name={normalized})")
-                    i = j
-                else:
-                    i += 1
 
     logger.info(f"Wrote predictions to {args.output_path}")
 
