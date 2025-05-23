@@ -91,7 +91,7 @@ if __name__ == '__main__':
     parser.add_argument('--output_path', required=False, help='Path to write CoNLL predictions')
     parser.add_argument('--bert_model',  default='aubmindlab/bert-base-arabertv2')
     parser.add_argument('--dropout',     type=float, default=0.1)
-    parser.add_argument('--max_length',  type=int,   default=512')
+    parser.add_argument('--max_length',  type=int,   default=512)
     args = parser.parse_args()
 
     if not args.text and not args.data_file:
