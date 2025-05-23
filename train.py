@@ -19,10 +19,10 @@ def train_flat(args):
     # Device setup
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # Load entity config
+    # Load entity configuration
     entities, label_list, outside_tag = load_entity_config()
 
-    # Load datasets and dataloaders
+    # Parse datasets and build dataloaders
     datasets, vocabs = parse_conll_files([args.train_file, args.dev_file])
     data_config = {
         "fn": "src.datasets.FlatDataset",
@@ -50,7 +50,7 @@ def train_flat(args):
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Training loop with progress bars
+    # Training loop
     for epoch in range(1, args.epochs + 1):
         model.train()
         running_loss = 0.0
@@ -61,7 +61,7 @@ def train_flat(args):
             labels = batch["labels"].to(device)
 
             optimizer.zero_grad()
-            logits = model(input_ids, attention_mask)
+            logits = model(input_ids, attention_mask)  # [B, L, C]
             B, L, C = logits.size()
             loss = criterion(logits.view(B*L, C), labels.view(B*L))
             loss.backward()
@@ -84,15 +84,21 @@ def train_flat(args):
                 input_ids = batch["input_ids"].to(device)
                 attention_mask = batch["attention_mask"].to(device)
                 labels = batch["labels"].to(device)
-
                 logits = model(input_ids, attention_mask)
                 preds = logits.argmax(dim=-1)
 
+                # Filter out padding (-1) positions for both gold and pred
                 for gold_seq, pred_seq in zip(labels.cpu().tolist(), preds.cpu().tolist()):
-                    true_seq = [label_list[i] for i in gold_seq if i != -1]
-                    pred_seq = [label_list[i] for i in pred_seq if i != -1]
-                    y_true.append(true_seq)
-                    y_pred.append(pred_seq)
+                    true_seq_filtered = []
+                    pred_seq_filtered = []
+                    for g, p in zip(gold_seq, pred_seq):
+                        if g == -1:
+                            continue
+                        true_seq_filtered.append(label_list[g])
+                        pred_seq_filtered.append(label_list[p])
+                    y_true.append(true_seq_filtered)
+                    y_pred.append(pred_seq_filtered)
+
         report = classification_report(y_true, y_pred)
         logger.info(f"[Flat] Epoch {epoch} Dev Metrics:\n{report}")
 
