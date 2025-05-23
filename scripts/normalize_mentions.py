@@ -1,50 +1,41 @@
-# scripts/normalize_mentions.py
-import argparse
-from rapidfuzz import process
-from src.db import get_connection
+import sqlite3
+from rapidfuzz import process, fuzz
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--threshold', type=int, default=80)
-args = parser.parse_args()
+def normalize_mentions(db_path="legal_ner.db", score_thresh=80):
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
 
-conn = get_connection()
-cur = conn.cursor()
+    # load all canonical codes
+    c.execute("SELECT law_id, code FROM laws")
+    laws = c.fetchall()  # list of (law_id, code)
 
-# load canon
-cur.execute('SELECT law_id, raw_text FROM laws')
-laws = cur.fetchall()
-law_texts = [r['raw_text'] for r in laws]
+    c.execute("SELECT article_id, law_id, number FROM articles")
+    articles = c.fetchall()
 
-cur.execute('SELECT article_id, law_id, raw_text FROM articles')
-arts = cur.fetchall()
-arts_by_law = {}
-for r in arts:
-    arts_by_law.setdefault(r['law_id'], []).append((r['article_id'], r['raw_text']))
+    # get raw mentions of type LAW or ARTICLE
+    c.execute("""
+      SELECT mention_id, entity_text, entity_type 
+      FROM mentions WHERE entity_type IN ('LAW','ARTICLE')
+    """)
+    for mid, text, etype in c.fetchall():
+        if etype == "LAW":
+            # match against law codes
+            choices = {code: lid for (lid, code) in laws}
+        else:
+            # match against article numbers
+            choices = {num: aid for (aid, _, num) in articles}
 
-# normalize
-cur.execute('SELECT mention_id, mention_text, is_article, entity_type, resolved_law FROM mentions')
-rows = cur.fetchall()
-for r in rows:
-    mid, text, is_art, ent, parent_law = r
-    law_id = parent_law
-    score = 0
-    # normalize law first
-    best, score, idx = process.extractOne(text, law_texts)
-    law_id = laws[idx]['law_id'] if score>=args.threshold else None
+        best, score, _ = process.extractOne(
+            text, 
+            choices.keys(), 
+            scorer=fuzz.token_sort_ratio
+        )
+        if score >= score_thresh:
+            mapped_id = choices[best]
+            col = "law_id" if etype=="LAW" else "article_id"
+            c.execute(f"""
+              UPDATE mentions SET {col}=? WHERE mention_id=?
+            """, (mapped_id, mid))
 
-    art_id = None
-    if is_art and law_id:
-        arts = arts_by_law.get(law_id, [])
-        texts = [a[1] for a in arts]
-        best2, score2, idx2 = process.extractOne(text, texts)
-        if score2>=args.threshold:
-            art_id = arts[idx2][0]
-
-    cur.execute(
-        'UPDATE mentions SET resolved_law=?, resolved_article=?, match_score=? WHERE mention_id=?',
-        (law_id, art_id, score, mid)
-    )
-
-conn.commit()
-cur.close()
-conn.close()
+    conn.commit()
+    conn.close()
