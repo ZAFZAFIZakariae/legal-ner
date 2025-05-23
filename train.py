@@ -8,6 +8,7 @@ from transformers import get_linear_schedule_with_warmup
 from tqdm.auto import tqdm
 from seqeval.metrics import classification_report
 
+from src.utils import load_entity_config
 from src.data_loader import parse_conll_files, get_dataloaders
 from src.model import LawTagger
 
@@ -15,24 +16,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def train_flat(args):
+    # Device setup
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # 1) Prepare label list
-    entities = ["LAW","CASE","COURT","JUDGE","LAWYER","COURT_CLERK","ATTORNEY_GENERAL"]
-    label_list = ["O"] + [f"{p}-{e}" for e in entities for p in ("B","I")]
+    # Load entity config
+    entities, label_list, outside_tag = load_entity_config()
 
-    # 2) Load datasets
+    # Load datasets and dataloaders
     datasets, vocabs = parse_conll_files([args.train_file, args.dev_file])
-    data_cfg = {
+    data_config = {
         "fn": "src.datasets.FlatDataset",
         "kwargs": {"tokenizer_name": args.bert_model}
     }
     train_loader, dev_loader = get_dataloaders(
-        datasets, vocabs, data_cfg,
+        datasets, vocabs, data_config,
         batch_size=args.batch_size
     )
 
-    # 3) Model, optimizer, scheduler, loss
+    # Initialize model, optimizer, scheduler, loss
     model = LawTagger(
         bert_model_name=args.bert_model,
         label_list=label_list,
@@ -49,10 +50,10 @@ def train_flat(args):
 
     os.makedirs(args.output_dir, exist_ok=True)
 
+    # Training loop with progress bars
     for epoch in range(1, args.epochs + 1):
         model.train()
         running_loss = 0.0
-        # Progress bar for training
         train_bar = tqdm(train_loader, desc=f"Epoch {epoch}/{args.epochs}", leave=False)
         for batch in train_bar:
             input_ids = batch["input_ids"].to(device)
@@ -74,7 +75,7 @@ def train_flat(args):
         avg_train_loss = running_loss / len(train_loader)
         logger.info(f"[Flat] Epoch {epoch} Train Loss: {avg_train_loss:.4f}")
 
-        # 5) Dev evaluation with progress bar
+        # Evaluation on dev set
         model.eval()
         y_true, y_pred = [], []
         dev_bar = tqdm(dev_loader, desc="Evaluating", leave=False)
@@ -95,20 +96,20 @@ def train_flat(args):
         report = classification_report(y_true, y_pred)
         logger.info(f"[Flat] Epoch {epoch} Dev Metrics:\n{report}")
 
-        # 6) Save checkpoint
-        ckpt = os.path.join(args.output_dir, f"flat_epoch{epoch}.pt")
-        model.save(ckpt)
-        logger.info(f"Saved checkpoint: {ckpt}")
+        # Save checkpoint
+        ckpt_path = os.path.join(args.output_dir, f"flat_epoch{epoch}.pt")
+        model.save(ckpt_path)
+        logger.info(f"Saved checkpoint: {ckpt_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Flat NER with progress bars")
-    parser.add_argument("--train_file",  required=True)
-    parser.add_argument("--dev_file",    required=True)
-    parser.add_argument("--output_dir",  default="output/flat")
-    parser.add_argument("--epochs",      type=int,   default=5)
-    parser.add_argument("--batch_size",  type=int,   default=8)
-    parser.add_argument("--lr",          type=float, default=5e-5)
-    parser.add_argument("--dropout",     type=float, default=0.1)
-    parser.add_argument("--bert_model",  default="aubmindlab/bert-base-arabertv2")
+    parser.add_argument("--train_file",  required=True, help="Path to train .conll file")
+    parser.add_argument("--dev_file",    required=True, help="Path to dev .conll file")
+    parser.add_argument("--output_dir",  default="output/flat", help="Dir to save checkpoints")
+    parser.add_argument("--epochs",      type=int,   default=5, help="Number of epochs to train")
+    parser.add_argument("--batch_size",  type=int,   default=8, help="Batch size")
+    parser.add_argument("--lr",          type=float, default=5e-5, help="Learning rate")
+    parser.add_argument("--dropout",     type=float, default=0.1, help="Dropout rate")
+    parser.add_argument("--bert_model",  default="aubmindlab/bert-base-arabertv2", help="Pretrained BERT model")
     args = parser.parse_args()
     train_flat(args)
