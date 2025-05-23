@@ -1,0 +1,27 @@
+{
+  "entities": [
+    "PERS",
+    "EVENT",
+    "CARDINAL",
+    "NORP",
+    "DATE",
+    "ORDINAL",
+    "OCC",
+    "TIME",
+    "PERCENT",
+    "ORG",
+    "LANGUAGE",
+    "QUANTITY",
+    "GPE",
+    "WEBSITE",
+    "UNIT",
+    "LOC",
+    "LAW",
+    "MONEY",
+    "FAC",
+    "PRODUCT",
+    "CURR"
+  ],
+  "prefixes": ["B", "I"],
+  "outside_tag": "O"
+}
