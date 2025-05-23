@@ -1,0 +1,13 @@
+{
+  "entities": [
+    "LAW",
+    "CASE",
+    "COURT",
+    "JUDGE",
+    "LAWYER",
+    "COURT_CLERK",
+    "ATTORNEY_GENERAL"
+  ],
+  "prefixes": ["B", "I"],
+  "outside_tag": "O"
+}
