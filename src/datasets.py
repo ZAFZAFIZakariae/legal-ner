@@ -140,6 +140,7 @@ class NestedDataset(Dataset):
     
             # pad span matrix with ignore_index = -1
             pad_mat = torch.full((max_len, max_len), fill_value=-1, dtype=spans.dtype)
+            
             pad_mat[:L, :L] = spans
     
             padded_input_ids.append(padded_ids)
