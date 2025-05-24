@@ -87,7 +87,7 @@ def train_flat(args):
         # Evaluation on dev set
         model.eval()
         y_true, y_pred = [], []
-        dev_bar = tqdm(dev_loader, desc="Evaluating", leave=False)
+        dev_bar = tqdm(dev_loader, desc="Evaluating", leave=True)
         with torch.no_grad():
             for batch in dev_bar:
                 input_ids = batch["input_ids"].to(device)
@@ -113,7 +113,10 @@ def train_flat(args):
             y_pred,
             zero_division=0
         )
-        logger.info(f"[Flat] Epoch {epoch} Dev Metrics:\n{report}")
+        logger.info(f"[Flat] Epoch {epoch} Dev Metrics:
+{report}")
+        print(f"[Flat] Epoch {epoch} Dev Metrics:
+{report}")
 
         # Save checkpoint
         ckpt_path = os.path.join(args.output_dir, f"flat_epoch{epoch}.pt")
