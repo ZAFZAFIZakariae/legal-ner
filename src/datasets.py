@@ -116,39 +116,32 @@ class NestedDataset(Dataset):
 
     @staticmethod
     def collate_fn(batch):
-        # each b in batch is a dict with keys: input_ids (Tensor[L]), attention_mask (Tensor[L]),
-        # and span_labels (Tensor[L, L]) for your nested spans.
-        # 1) find max sequence length in this batch
+        
+        # 1) find max length in batch
         seq_lens = [b['input_ids'].size(0) for b in batch]
-        max_len = max(seq_lens)
+        max_len  = max(seq_lens)
     
-        padded_input_ids   = []
-        padded_attention   = []
-        padded_span_labels = []
-    
+        padded_input_ids, padded_masks, padded_spans = [], [], []
         for b in batch:
-            ids   = b['input_ids']      # shape [L]
-            mask  = b['attention_mask'] # shape [L]
-            spans = b['span_labels']    # shape [L, L]
-    
-            L = ids.size(0)
+            ids   = b['input_ids']      # [L]
+            mask  = b['attention_mask'] # [L]
+            spans = b['span_labels']    # [L, L]
+            L     = ids.size(0)
             pad_amt = max_len - L
     
-            # pad tokens & masks
-            padded_ids  = torch.cat([ids,  torch.zeros(pad_amt, dtype=ids.dtype)],    dim=0)
-            padded_mask = torch.cat([mask, torch.zeros(pad_amt, dtype=mask.dtype)],  dim=0)
+            # pad input_ids & mask to [max_len]
+            padded_input_ids.append(torch.cat([ids,   torch.zeros(pad_amt, dtype=ids.dtype)]))
+            padded_masks.append(    torch.cat([mask,  torch.zeros(pad_amt, dtype=mask.dtype)]))
     
-            # pad span matrix with ignore_index = -1
-            pad_mat = torch.full((max_len, max_len), fill_value=-1, dtype=spans.dtype)
-            
+            # create a max_len×max_len span matrix filled with -1
+            pad_mat = torch.full((max_len, max_len), -1, dtype=spans.dtype)
+            # **use a single 2D slice** into the top-left corner
             pad_mat[:L, :L] = spans
     
-            padded_input_ids.append(padded_ids)
-            padded_attention.append(padded_mask)
-            padded_span_labels.append(pad_mat)
+            padded_spans.append(pad_mat)
     
         return {
             'input_ids':      torch.stack(padded_input_ids),   # [B, max_len]
-            'attention_mask': torch.stack(padded_attention),   # [B, max_len]
-            'span_labels':    torch.stack(padded_span_labels), # [B, max_len, max_len]
+            'attention_mask': torch.stack(padded_masks),        # [B, max_len]
+            'span_labels':    torch.stack(padded_spans),        # [B, max_len, max_len]
         }
