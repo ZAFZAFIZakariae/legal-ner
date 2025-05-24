@@ -116,6 +116,38 @@ class NestedDataset(Dataset):
 
     @staticmethod
     def collate_fn(batch):
-        keys = batch[0].keys()
-        collated = {k: torch.stack([b[k] for b in batch]) for k in keys}
-        return collated
+        # each b in batch is a dict with keys: input_ids (Tensor[L]), attention_mask (Tensor[L]),
+        # and span_labels (Tensor[L, L]) for your nested spans.
+        # 1) find max sequence length in this batch
+        seq_lens = [b['input_ids'].size(0) for b in batch]
+        max_len = max(seq_lens)
+    
+        padded_input_ids   = []
+        padded_attention   = []
+        padded_span_labels = []
+    
+        for b in batch:
+            ids   = b['input_ids']      # shape [L]
+            mask  = b['attention_mask'] # shape [L]
+            spans = b['span_labels']    # shape [L, L]
+    
+            L = ids.size(0)
+            pad_amt = max_len - L
+    
+            # pad tokens & masks
+            padded_ids  = torch.cat([ids,  torch.zeros(pad_amt, dtype=ids.dtype)],    dim=0)
+            padded_mask = torch.cat([mask, torch.zeros(pad_amt, dtype=mask.dtype)],  dim=0)
+    
+            # pad span matrix with ignore_index = -1
+            pad_mat = torch.full((max_len, max_len), fill_value=-1, dtype=spans.dtype)
+            pad_mat[:L, :L] = spans
+    
+            padded_input_ids.append(padded_ids)
+            padded_attention.append(padded_mask)
+            padded_span_labels.append(pad_mat)
+    
+        return {
+            'input_ids':      torch.stack(padded_input_ids),   # [B, max_len]
+            'attention_mask': torch.stack(padded_attention),   # [B, max_len]
+            'span_labels':    torch.stack(padded_span_labels), # [B, max_len, max_len]
+        }
