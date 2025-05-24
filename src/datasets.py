@@ -92,9 +92,8 @@ class NestedDataset(Dataset):
             words,
             is_split_into_words=True,
             return_tensors="pt",
-            padding="max_length",
-            truncation=True,
-            max_length=self.max_length,
+            padding=False,
+            truncation=False
         )
 
         # Build span label matrix: shape (L, L), where L = len(words)
@@ -103,7 +102,7 @@ class NestedDataset(Dataset):
         # Assign diagonal spans for each entity mention
         for i, tok in enumerate(segment):
             for tag in tok.gold_tag:
-                if tag.startswith("B-") or tag.startswith("I-"):
+                if tag.startswith("B-"):
                     ent = tag.split("-", 1)[1]
                     t_idx = self.type2idx.get(ent)
                     if t_idx is not None:
@@ -116,11 +115,10 @@ class NestedDataset(Dataset):
 
     @staticmethod
     def collate_fn(batch):
-        
         # 1) find max length in batch
         seq_lens = [b['input_ids'].size(0) for b in batch]
         max_len  = max(seq_lens)
-    
+
         padded_input_ids, padded_masks, padded_spans = [], [], []
         for b in batch:
             ids   = b['input_ids']      # [L]
@@ -128,20 +126,21 @@ class NestedDataset(Dataset):
             spans = b['span_labels']    # [L, L]
             L     = ids.size(0)
             pad_amt = max_len - L
-    
+
             # pad input_ids & mask to [max_len]
-            padded_input_ids.append(torch.cat([ids,   torch.zeros(pad_amt, dtype=ids.dtype)]))
-            padded_masks.append(    torch.cat([mask,  torch.zeros(pad_amt, dtype=mask.dtype)]))
-    
+            padded_input_ids.append(torch.cat([ids, torch.zeros(pad_amt, dtype=ids.dtype)]))
+            padded_masks.append(torch.cat([mask, torch.zeros(pad_amt, dtype=mask.dtype)]))
+
             # create a max_len×max_len span matrix filled with -1
             pad_mat = torch.full((max_len, max_len), -1, dtype=spans.dtype)
-            # **use a single 2D slice** into the top-left corner
+            # use a single 2D slice into the top-left corner
             pad_mat[:L, :L] = spans
-    
+
             padded_spans.append(pad_mat)
-    
+
         return {
             'input_ids':      torch.stack(padded_input_ids),   # [B, max_len]
             'attention_mask': torch.stack(padded_masks),        # [B, max_len]
             'span_labels':    torch.stack(padded_spans),        # [B, max_len, max_len]
         }
+
