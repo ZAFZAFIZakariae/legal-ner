@@ -7,6 +7,8 @@ from torch.optim import AdamW
 from transformers import get_linear_schedule_with_warmup
 from tqdm.auto import tqdm
 from seqeval.metrics import classification_report
+import warnings
+from seqeval.metrics.v1 import UndefinedMetricWarning
 
 from src.utils import load_entity_config
 from src.data_loader import parse_conll_files, get_dataloaders
@@ -16,6 +18,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def train_flat(args):
+    # Silence seqeval undefined-metric warnings
+    warnings.filterwarnings(
+        "ignore",
+        category=UndefinedMetricWarning,
+        module="seqeval.metrics.v1"
+    )
+
     # Device setup
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -99,7 +108,11 @@ def train_flat(args):
                     y_true.append(true_seq_filtered)
                     y_pred.append(pred_seq_filtered)
 
-        report = classification_report(y_true, y_pred)
+        report = classification_report(
+            y_true,
+            y_pred,
+            zero_division=0
+        )
         logger.info(f"[Flat] Epoch {epoch} Dev Metrics:\n{report}")
 
         # Save checkpoint
