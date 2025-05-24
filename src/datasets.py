@@ -67,6 +67,9 @@ class FlatDataset(Dataset):
         collated = {k: torch.stack([b[k] for b in batch]) for k in keys}
         return collated
 
+
+
+
 class NestedDataset(Dataset):
     """
     Dataset for nested span legal NER.
@@ -143,4 +146,3 @@ class NestedDataset(Dataset):
             'attention_mask': torch.stack(padded_masks),        # [B, max_len]
             'span_labels':    torch.stack(padded_spans),        # [B, max_len, max_len]
         }
-
