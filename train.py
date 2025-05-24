@@ -86,7 +86,8 @@ def train_flat(args):
 
         # Evaluation on dev set
         model.eval()
-        y_true, y_pred = [], []
+        y_true = []
+        y_pred = []
         dev_bar = tqdm(dev_loader, desc="Evaluating", leave=True)
         with torch.no_grad():
             for batch in dev_bar:
@@ -113,10 +114,8 @@ def train_flat(args):
             y_pred,
             zero_division=0
         )
-        logger.info(f"[Flat] Epoch {epoch} Dev Metrics:
-{report}")
-        print(f"[Flat] Epoch {epoch} Dev Metrics:
-{report}")
+        logger.info(f"[Flat] Epoch {epoch} Dev Metrics:\n{report}")
+        print(f"[Flat] Epoch {epoch} Dev Metrics:\n{report}")
 
         # Save checkpoint
         ckpt_path = os.path.join(args.output_dir, f"flat_epoch{epoch}.pt")
@@ -125,13 +124,13 @@ def train_flat(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Flat NER with progress bars")
-    parser.add_argument("--train_file",  required=True, help="Path to train .conll file")
-    parser.add_argument("--dev_file",    required=True, help="Path to dev .conll file")
-    parser.add_argument("--output_dir",  default="output/flat", help="Dir to save checkpoints")
-    parser.add_argument("--epochs",      type=int,   default=5, help="Number of epochs to train")
-    parser.add_argument("--batch_size",  type=int,   default=8, help="Batch size")
-    parser.add_argument("--lr",          type=float, default=5e-5, help="Learning rate")
-    parser.add_argument("--dropout",     type=float, default=0.1, help="Dropout rate")
-    parser.add_argument("--bert_model",  default="aubmindlab/bert-base-arabertv2", help="Pretrained BERT model")
+    parser.add_argument("--train_file", required=True, help="Path to train .conll file")
+    parser.add_argument("--dev_file", required=True, help="Path to dev .conll file")
+    parser.add_argument("--output_dir", default="output/flat", help="Dir to save checkpoints")
+    parser.add_argument("--epochs", type=int, default=5, help="Number of epochs to train")
+    parser.add_argument("--batch_size", type=int, default=8, help="Batch size")
+    parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate")
+    parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
+    parser.add_argument("--bert_model", default="aubmindlab/bert-base-arabertv2", help="Pretrained BERT model")
     args = parser.parse_args()
     train_flat(args)
